@@ -30,6 +30,12 @@ import numpy as np
 
 from OpenFL import FLP
 
+
+# import usb.backend.libusb1
+ 
+# backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.dll")
+# dev = usb.core.find(backend=backend)
+
 ################################################################################
 
 class DecodeError(RuntimeError):
@@ -322,6 +328,7 @@ class Printer(object):
                 block is an integer
                 data is a bytearray, filename, or FLP.Packets object
         """
+        
         if isinstance(data, FLP.Packets):
             assert skip_audit == False
             return self.write_block_flp(block, data)
@@ -365,20 +372,26 @@ class Printer(object):
             command must be CMD_READ_LASER_TABLE, CMD_READ_GRID_TABLE, or
             CMD_READ_ZSENSOR_HEIGHT
         """
+        print('Calling _read_cal_field(self,' + str(cmd) + ')...')
         data = self._command(cmd)
-
+        print('Data received, unvalidated dump below...')
+        print(data)
+        print('****************')
         if isinstance(data, Response):
+            print('Received valid response, data below...')
+            print(data)
             return data
-
+        print('Did not pass isinstance Response, proceeding to extract block and do stuff...')
         # Extract block and count from the returned data
         count = struct.unpack('<I', data[:4])[0]
-
+        print('Unpacked struct, count is: ' + str(count))
         # Sanity-check responses
         if count != len(data) - 8:
             raise BadResponse("Didn't receive enough data in the block")
-
+        print('Received enough data, evaluates to ' + str(eval(str(data[4:-4]))))
         # Return the data section of the block, stripping the trailing CRC
         # and evaluating to get a list of lists
+        print('Returning data to caller...')
         return eval(str(data[4:-4]))
 
     def read_laser_table(self):
@@ -389,6 +402,7 @@ class Printer(object):
     def read_grid_table(self):
         """ Reads the printer's laser table
         """
+        print('Attempting to read the printer\'s laser table with read_grid_table(self)...')
         return self._read_cal_field(Command.CMD_READ_GRID_TABLE)
 
     def read_zsensor_height(self):
@@ -508,6 +522,8 @@ class Printer(object):
         """
         if self._laser_table is None:
             self._laser_table = np.asarray(self.read_laser_table())
+            print('Nope, hardcode that laser table in ticks_to_mW')
+            self._laser_table = np.array([[0, 0, 0], [0.1, 0.01, 8.0], [0.2, 0.02, 11.0], [0.3, 0.03, 14.0], [0.4, 0.03, 16.0], [0.5, 0.04, 18.0], [0.6, 0.05, 20.0], [0.7, 0.07, 22.0], [0.8, 0.09, 23.0], [0.9, 0.15, 26.0], [1.0, 1.14, 27.0], [1.1, 6.03, 29.0], [1.2, 10.93, 30.0], [1.3, 15.83, 32.0], [1.4, 20.81, 33.0], [1.5, 25.77, 35.0], [1.6, 30.81, 36.0], [1.7, 35.82, 37.0], [1.8, 40.93, 38.0], [1.9, 46.1, 40.0], [2.0, 51.23, 41.0], [2.1, 56.4, 41.0], [2.2, 61.46, 43.0], [2.3, 66.77, 43.0], [2.4, 72.0, 44.0], [2.5, 77.28, 46.0], [2.6, 82.63, 47.0]])
 
         return np.interp(ticks,
                          self._laser_table[:,0] * float(0xffff) / 3.3,
@@ -521,7 +537,11 @@ class Printer(object):
             Raises an exception if the desired power is out of range.
         """
         if self._laser_table is None:
+            print('Self._laser_table is None, attempting to read it from printer...')
             self._laser_table = np.asarray(self.read_laser_table())
+            print('Only jokes, we\'re in manual override so we already dumped a table into the code')
+
+            self._laser_table = np.array([[0, 0, 0], [0.1, 0.01, 8.0], [0.2, 0.02, 11.0], [0.3, 0.03, 14.0], [0.4, 0.03, 16.0], [0.5, 0.04, 18.0], [0.6, 0.05, 20.0], [0.7, 0.07, 22.0], [0.8, 0.09, 23.0], [0.9, 0.15, 26.0], [1.0, 1.14, 27.0], [1.1, 6.03, 29.0], [1.2, 10.93, 30.0], [1.3, 15.83, 32.0], [1.4, 20.81, 33.0], [1.5, 25.77, 35.0], [1.6, 30.81, 36.0], [1.7, 35.82, 37.0], [1.8, 40.93, 38.0], [1.9, 46.1, 40.0], [2.0, 51.23, 41.0], [2.1, 56.4, 41.0], [2.2, 61.46, 43.0], [2.3, 66.77, 43.0], [2.4, 72.0, 44.0], [2.5, 77.28, 46.0], [2.6, 82.63, 47.0]])
 
         if mW > max(self._laser_table[:,1]):
             raise LaserPowerError(
@@ -548,6 +568,16 @@ class Printer(object):
         xshape = np.shape(x)
         if self._grid_table is None:
             grid = np.array(self.read_grid_table())
+            # MANUAL OVERRIDE BABEEEE
+            grid = np.array([[[ 5732, 6398], [ 5589, 19354], [ 5461, 32568], [ 5370, 45721], [ 5305, 58668]], 
+                             [[18959, 6097], [18831, 19252], [18724, 32697], [18643, 46081], [18585, 59238]], 
+                             [[32818, 6063], [32715, 19281], [32630, 32804], [32554, 46271], [32506, 59492]], 
+                             [[46499, 6308], [46432, 19463], [46365, 32894], [46316, 46279], [46276, 59421]], 
+                             [[59523, 6835], [59471, 19780], [59434, 32965], [59408, 46112], [59393, 59038]]])
+            print('grid shape failing here....')
+            print(grid.shape)
+            print('WHO IS IT ^^^')
+            print('ITS NUMPY BITCH')
             assert grid.shape == (5, 5, 2)
 
             pts_mm = np.linspace(-64, 64, 5) # Grid positions in mm

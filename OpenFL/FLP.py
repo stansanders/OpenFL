@@ -196,7 +196,7 @@ class XYMove(LaserCommand):
         """Convert to binary string."""
         assert self.data == self.npoints
         return (super(XYMove, self).tostring() +
-                ''.join(self.rowstruct.pack(*row) for row in self.points))
+                b''.join(self.rowstruct.pack(*row) for row in self.points))
 
     def __str__(self):
         result = super(XYMove, self).__str__()
@@ -617,7 +617,7 @@ class Packets(list):
 
     def tostring(self):
         """Stringify all Packets for serialization."""
-        return ''.join(cmd.tostring() for cmd in self)
+        return b''.join(cmd.tostring() for cmd in self)
 
     def tofile(self, fileHandle):
         """Write to a file."""

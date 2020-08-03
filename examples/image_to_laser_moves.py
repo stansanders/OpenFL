@@ -6,8 +6,8 @@ import inspect
 from os.path import dirname
 
 # Add parent directory to sys.path so we find OpenFL.
-sys.path.append(dirname(dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))
-
+sys.path.append(dirname(dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))) + '\\OpenFL')
+print(sys.path)
 from context import FLP, Printer
 
 GERBER_EXTENSIONS = ('.gbl', '.gbs', '.gtl')
@@ -27,11 +27,22 @@ def image_to_laser_moves_xy_mm_dt_s_mW(image, M,
     M = np.asarray(M)
     assert image.ndim == 2
     assert M.shape == (3, 3)
+    
+
     # Transform so image (0, 0) sits at the origin and 
     # image is in quadrant IV (+x,-y):
+    print('************************M BEFORE DOT PRODUCT*************************************')
+
+    print(str(M))
+
+    print('************************M BEFORE DOT PRODUCT*************************************')
+    print('************************M  AFTER DOT PRODUCT*************************************')
     M = M.dot([[0,1,0],
                [-1,0,0],
                [0,0,1]])
+    print(str(M))
+    print('************************M  AFTER DOT PRODUCT*************************************')
+
     # We need to add zeros at the ends of rows
     # and we want to scan back and forth:
     image = image.copy()
@@ -146,7 +157,7 @@ def png_to_flp(pngfilename, flpfilename, printer, pixel_mm=0.1, mmps=295.0, mW=3
                invert=False,
                tile=(1,1)):
     from scipy.ndimage import imread
-    if isinstance(pngfilename, basestring):
+    if isinstance(pngfilename, str):
         image = imread(pngfilename)
         if image.ndim == 3:
             image = image.mean(axis=-1)
@@ -161,12 +172,48 @@ def png_to_flp(pngfilename, flpfilename, printer, pixel_mm=0.1, mmps=295.0, mW=3
         image = 1.0 - image
     image *= mW
     M = np.diag((-pixel_mm,pixel_mm,1))+[[0,0,0.1],[0,0,0.05],[0,0,0]]
+    print('here\'s the M tranformation: ' + str(M))
     image = np.tile(image, tile)
     result_xy_mm_dt_s_mW = image_to_laser_moves_xy_mm_dt_s_mW(image, M, mmps=mmps, doFilter=True)
     # Center:
     lo = result_xy_mm_dt_s_mW[:,:2].min(axis=0)
     hi = result_xy_mm_dt_s_mW[:,:2].max(axis=0)
-    result_xy_mm_dt_s_mW[:,:2] -= [(lo + hi)/2]
+    pretrans = result_xy_mm_dt_s_mW[:,:2]
+    # result_xy_mm_dt_s_mW[:,:2] -= [(lo + hi)/2]
+    print('Here\'s the lo / hi: ' + str(lo) + ' / ' + str(hi) )
+    print('Here\'s the av lohi: ' + str((lo+hi)/2) )
+    print('aaaaand  subtracted: ' + str(lo-hi))
+    # print('***********************PRETRANS*************************************')
+    
+    borcen = (lo+hi)/2
+    bedoff = np.array([-62.5, -62.5])
+    # bedoff = [(bedoff/2)]
+    zipper = zip(bedoff, borcen)
+    testpos = np.add(bedoff, borcen)
+    result_xy_mm_dt_s_mW[:,:2] -= [bedoff]
+    print('--------------------------------ATTEMPTING---------------------------------------')
+    print('   lo  = ' + str(type(lo)) + '   ' + str(lo))
+    print('   hi  = ' + str(type(hi)) + '   ' + str(hi))
+    print('borcen = ' + str(type(borcen)) + '   ' + str(borcen))
+    print('bedoff = ' + str(type(bedoff)) + '   ' + str(bedoff))
+    print('zipper = ' + str(type(zipper)) + '   ' + str(zipper))
+    print('testpos = ' + str(type(testpos)) + ' ' + str(testpos))
+
+    # print('pinit  = ' + str(pinit))
+    # print(str(pretrans))
+    # print('*******************************************************************')
+    # print('***********************POSTTRANS***********************************')
+    # print( str(result_xy_mm_dt_s_mW[:,:2]))
+    # print('*******************************************************************')
+    # centerboard = lo-hi
+    # bedoffset = [-62.5, -62.5]
+    # stantrans = bedoffset - centerboard
+    # print('WHATS THAT STANTRANS ITS : ' + str(stantrans))
+    # result_xy_mm_dt_s_mW[:,:2] -= stantrans
+    # print('***********************STANTRANS***********************************')
+    # print( str(result_xy_mm_dt_s_mW[:,:2]))
+    # print('*******************************************************************')
+
     data = printer.samples_to_FLP(xy_mm_dts_s_mW=result_xy_mm_dt_s_mW)
     data.tofile(flpfilename)
     return data, result_xy_mm_dt_s_mW, image
@@ -195,7 +242,7 @@ def plotResults(result):
     #plot(result[:,2], result[:,1])
     #scatter(result[:,2], result[:,1], c=result[:,3],vmin=0, vmax=150)
     #colorbar(colorMapper)
-    show()
+    # show()
 
 
 def gerberToPNG(filename, png, pixel_mm=0.1):
@@ -210,7 +257,7 @@ def gerberToPNG(filename, png, pixel_mm=0.1):
             raise Exception('Module pyhull not found. Try "pip install pyhull"?')
         raise Exception('The gerber module can be found at https://github.com/curtacircuitos/pcb-tools.')
     try:
-        from gerber.render import GerberCairoContext
+        from gerber.render.cairo_backend import GerberCairoContext
     except Exception as e:
         if 'cairo' in str(e).lower():
             raise Exception('Failed to load gerber.render. Do you have the py2cairo package, which provides the cairo module?')
@@ -242,15 +289,19 @@ def convertToTmpPNG(filename, png, pixel_mm=0.1):
 def image_to_flp(imagefilename, flpfilename, pixel_mm=0.1, **kwargs):
     import sys
     isGerber = os.path.splitext(imagefilename.lower())[1] in GERBER_EXTENSIONS
+    print('is it a gerber? : ' + str(isGerber))
     try:
         return png_to_flp(imagefilename, flpfilename, pixel_mm=pixel_mm, **kwargs)
     except IOError as e:
         if e.strerror == 'No such file or directory':
             raise
     if not imagefilename.endswith('.png'):
+        print('if not imagefilename.endswith(\'png\')')
         import tempfile
         fh = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
         imagefilename, pixel_mm = convertToTmpPNG(imagefilename, fh.name, pixel_mm=pixel_mm)
+        print('imagefilename ' + str(imagefilename))
+        print('pixel mm ' + str(pixel_mm))
     assert flpfilename.endswith('.flp')
     return png_to_flp(imagefilename, flpfilename, pixel_mm=pixel_mm, **kwargs)
 
